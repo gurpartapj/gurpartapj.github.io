@@ -35,6 +35,8 @@ nav a {
     justify-content: center;
     align-items: center;
     z-index: 100;
+    opacity: 1;
+    transition: opacity 0.45s ease;
 }
 
 #content {
@@ -111,4 +113,5 @@ h3 {
 .fade.visible {
     opacity: 1;
     transform: translateY(0);
+
 }
