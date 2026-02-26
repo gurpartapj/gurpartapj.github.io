@@ -2,7 +2,7 @@
 // I did not code this Site - ChatGPT was used for the Site Coding
 // Any Embedded System coding is done by me 
 // =============================
-// Fast Cinematic Real Tetris Intro
+// Guaranteed Fast Cinematic Tetris
 // =============================
 
 const intro = document.getElementById("intro");
@@ -17,8 +17,8 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-const CELL = 24;
-const ROWS = 16;   // smaller board = faster fill
+const CELL = 26;
+const ROWS = 14;
 const COLS = 10;
 
 const GRID_W = COLS * CELL;
@@ -31,102 +31,47 @@ function gridOrigin() {
   };
 }
 
-const SHAPES = {
-  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-  O: [[0,1,1,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]],
-  T: [[0,1,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
-  S: [[0,1,1,0],[1,1,0,0],[0,0,0,0],[0,0,0,0]],
-  Z: [[1,1,0,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]],
-  J: [[1,0,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
-  L: [[0,0,1,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
-};
-
 const COLORS = {
   I:"#39c6ff",
   O:"#ffd24a",
   T:"#b884ff",
-  S:"#58e06f",
-  Z:"#ff5c6c",
-  J:"#4f79ff",
   L:"#ff9a3c"
 };
 
-const PIECES = ["I","O","T","I","O","T","L","J"]; 
-// slight bias to flat pieces
-
 let board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
-
-function rotate(mat) {
-  return mat[0].map((_,i)=>mat.map(r=>r[i]).reverse());
-}
-
-function randomPiece() {
-  const key = PIECES[Math.floor(Math.random()*PIECES.length)];
-  let mat = SHAPES[key];
-  const rotations = Math.floor(Math.random()*4);
-  for(let i=0;i<rotations;i++) mat = rotate(mat);
-  return { key, mat, x:3, y:-1 };
-}
-
-function collides(p, dx, dy) {
-  for(let r=0;r<4;r++){
-    for(let c=0;c<4;c++){
-      if(!p.mat[r][c]) continue;
-      const nx = p.x + c + dx;
-      const ny = p.y + r + dy;
-      if(nx<0||nx>=COLS||ny>=ROWS) return true;
-      if(ny>=0 && board[ny][nx]) return true;
-    }
-  }
-  return false;
-}
-
-function lock(p) {
-  for(let r=0;r<4;r++){
-    for(let c=0;c<4;c++){
-      if(p.mat[r][c]){
-        const x=p.x+c;
-        const y=p.y+r;
-        if(y>=0) board[y][x]=p.key;
-      }
-    }
-  }
-}
-
-function clearLines() {
-  let cleared=0;
-  for(let r=ROWS-1;r>=0;r--){
-    if(board[r].every(cell=>cell)){
-      board.splice(r,1);
-      board.unshift(Array(COLS).fill(null));
-      cleared++;
-      r++;
-    }
-  }
-  return cleared;
-}
-
-let piece=randomPiece();
-let dropSpeed=50; // very fast
-let last=0;
-let linesCleared=0;
 let particles=[];
-let state="play";
+let state="build";
+let time=0;
 
-function explode() {
-  const {x,y}=gridOrigin();
-  for(let i=0;i<250;i++){
+// Pre-fill bottom 3 rows except one column
+const gap = Math.floor(Math.random()*COLS);
+
+for(let r=ROWS-3;r<ROWS;r++){
+  for(let c=0;c<COLS;c++){
+    if(c!==gap){
+      const keys=Object.keys(COLORS);
+      board[r][c]=keys[Math.floor(Math.random()*keys.length)];
+    }
+  }
+}
+
+// I-piece drop
+let iY=-4;
+let explosionTriggered=false;
+
+function explode(cx,cy){
+  for(let i=0;i<300;i++){
     particles.push({
-      x:x+GRID_W/2,
-      y:y+GRID_H/2,
-      dx:(Math.random()-0.5)*8,
-      dy:(Math.random()-1)*8,
-      life:60
+      x:cx,
+      y:cy,
+      dx:(Math.random()-0.5)*10,
+      dy:(Math.random()-1.2)*10,
+      life:70
     });
   }
 }
 
-function updateParticles() {
+function updateParticles(){
   particles.forEach(p=>{
     p.x+=p.dx;
     p.y+=p.dy;
@@ -136,11 +81,11 @@ function updateParticles() {
   particles=particles.filter(p=>p.life>0);
 }
 
-function drawParticles() {
+function drawParticles(){
   ctx.save();
   ctx.globalCompositeOperation="lighter";
   particles.forEach(p=>{
-    ctx.globalAlpha=p.life/60;
+    ctx.globalAlpha=p.life/70;
     ctx.fillStyle="#5aa9ff";
     ctx.fillRect(p.x,p.y,3,3);
   });
@@ -148,7 +93,7 @@ function drawParticles() {
   ctx.globalAlpha=1;
 }
 
-function drawBoard() {
+function drawBoard(){
   const {x:ox,y:oy}=gridOrigin();
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
@@ -160,47 +105,50 @@ function drawBoard() {
   }
 }
 
-function drawPiece() {
-  const {x:ox,y:oy}=gridOrigin();
-  for(let r=0;r<4;r++){
-    for(let c=0;c<4;c++){
-      if(piece.mat[r][c]){
-        ctx.fillStyle=COLORS[piece.key];
-        ctx.fillRect(ox+(piece.x+c)*CELL,oy+(piece.y+r)*CELL,CELL,CELL);
-      }
-    }
+function clearBottomLines(){
+  board.splice(ROWS-3,3);
+  for(let i=0;i<3;i++){
+    board.unshift(Array(COLS).fill(null));
   }
 }
 
-function loop(timestamp){
+function loop(){
   ctx.fillStyle="#0a0f1c";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  if(state==="play"){
-    if(timestamp-last>dropSpeed){
-      if(!collides(piece,0,1)){
-        piece.y++;
-      } else {
-        lock(piece);
-        const cleared=clearLines();
-        linesCleared+=cleared;
-        piece=randomPiece();
-        if(linesCleared>=2){ // trigger after 2 lines
-          state="explode";
-          explode();
-        }
-      }
-      last=timestamp;
-    }
-  }
+  time+=16;
 
   drawBoard();
-  drawPiece();
+
+  const {x:ox,y:oy}=gridOrigin();
+
+  if(state==="build"){
+    iY+=0.6;
+
+    // Draw vertical I piece
+    for(let i=0;i<4;i++){
+      ctx.fillStyle=COLORS.I;
+      ctx.fillRect(
+        ox+gap*CELL,
+        oy+(iY+i)*CELL,
+        CELL,
+        CELL
+      );
+    }
+
+    if(iY+3>=ROWS-1){
+      state="explode";
+      clearBottomLines();
+      explode(ox+gap*CELL,oy+(ROWS-2)*CELL);
+    }
+  }
 
   if(state==="explode"){
     updateParticles();
     drawParticles();
-    if(particles.length===0){
+
+    if(particles.length===0 && !explosionTriggered){
+      explosionTriggered=true;
       intro.style.opacity="0";
       setTimeout(()=>{
         intro.style.display="none";
@@ -212,4 +160,4 @@ function loop(timestamp){
   requestAnimationFrame(loop);
 }
 
-requestAnimationFrame(loop);
+loop();
