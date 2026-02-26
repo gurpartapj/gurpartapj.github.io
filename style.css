@@ -1,3 +1,6 @@
+/* ============================= */
+/* Global Reset */
+/* ============================= */
 * {
     margin: 0;
     padding: 0;
@@ -5,6 +8,9 @@
     scroll-behavior: smooth;
 }
 
+/* ============================= */
+/* Body */
+/* ============================= */
 body {
     font-family: 'Segoe UI', sans-serif;
     background: #0a0f1c;
@@ -12,20 +18,9 @@ body {
     overflow-x: hidden;
 }
 
-nav {
-    position: fixed;
-    top: 20px;
-    right: 40px;
-    z-index: 10;
-}
-
-nav a {
-    margin-left: 20px;
-    text-decoration: none;
-    color: #5aa9ff;
-    font-size: 0.9rem;
-}
-
+/* ============================= */
+/* Intro Screen */
+/* ============================= */
 #intro {
     position: fixed;
     width: 100%;
@@ -39,12 +34,45 @@ nav a {
     transition: opacity 0.45s ease;
 }
 
+#tetrisCanvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+/* ============================= */
+/* Navigation */
+/* ============================= */
+nav {
+    position: fixed;
+    top: 20px;
+    right: 40px;
+    z-index: 10;
+}
+
+nav a {
+    margin-left: 20px;
+    text-decoration: none;
+    color: #5aa9ff;
+    font-size: 0.9rem;
+    transition: 0.3s ease;
+}
+
+nav a:hover {
+    opacity: 0.7;
+}
+
+/* ============================= */
+/* Main Content */
+/* ============================= */
 #content {
     opacity: 0;
     transition: opacity 1.5s ease;
     padding: 120px 15%;
 }
 
+/* ============================= */
+/* Header */
+/* ============================= */
 header {
     text-align: center;
     margin-bottom: 100px;
@@ -61,6 +89,9 @@ h2 {
     font-weight: 400;
 }
 
+/* ============================= */
+/* Sections */
+/* ============================= */
 section {
     margin-bottom: 120px;
 }
@@ -70,16 +101,20 @@ h3 {
     margin-bottom: 25px;
 }
 
+/* ============================= */
+/* Project Card */
+/* ============================= */
 .card {
     background: rgba(255,255,255,0.03);
     padding: 30px;
     border-radius: 12px;
     box-shadow: 0 0 25px rgba(90,169,255,0.12);
-    transition: transform 0.4s ease;
+    transition: transform 0.4s ease, box-shadow 0.4s ease;
 }
 
 .card:hover {
     transform: translateY(-6px);
+    box-shadow: 0 0 35px rgba(90,169,255,0.25);
 }
 
 .card img {
@@ -88,6 +123,9 @@ h3 {
     margin-bottom: 20px;
 }
 
+/* ============================= */
+/* Buttons */
+/* ============================= */
 .btn {
     display: inline-block;
     padding: 12px 30px;
@@ -104,6 +142,9 @@ h3 {
     box-shadow: 0 0 20px #5aa9ff;
 }
 
+/* ============================= */
+/* Scroll Fade Animation */
+/* ============================= */
 .fade {
     opacity: 0;
     transform: translateY(40px);
@@ -113,5 +154,4 @@ h3 {
 .fade.visible {
     opacity: 1;
     transform: translateY(0);
-
 }
