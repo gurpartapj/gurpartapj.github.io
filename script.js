@@ -1,28 +1,24 @@
 // =============================
 // I did not code this Site - ChatGPT was used for the Site Coding
 // Any Embedded System coding is done by me 
-// Cinematic 4-Line Tetris Intro
-// Explosion + Flash + Subtle Shake
+// =============================
+// Fast Cinematic Real Tetris Intro
 // =============================
 
 const intro = document.getElementById("intro");
 const content = document.getElementById("content");
 const canvas = document.getElementById("tetrisCanvas");
-const ctx = canvas.getContext("2d", { alpha: false });
+const ctx = canvas.getContext("2d");
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(window.innerWidth * dpr);
-  canvas.height = Math.floor(window.innerHeight * dpr);
-  canvas.style.width = window.innerWidth + "px";
-  canvas.style.height = window.innerHeight + "px";
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 window.addEventListener("resize", resize);
 resize();
 
 const CELL = 24;
-const ROWS = 18;
+const ROWS = 16;   // smaller board = faster fill
 const COLS = 10;
 
 const GRID_W = COLS * CELL;
@@ -30,195 +26,190 @@ const GRID_H = ROWS * CELL;
 
 function gridOrigin() {
   return {
-    x: Math.floor((window.innerWidth - GRID_W) / 2),
-    y: Math.floor((window.innerHeight - GRID_H) / 2),
+    x: Math.floor((canvas.width - GRID_W) / 2),
+    y: Math.floor((canvas.height - GRID_H) / 2),
   };
 }
 
-const COLORS = ["#39c6ff","#ffd24a","#b884ff","#58e06f","#ff5c6c","#4f79ff","#ff9a3c"];
+const SHAPES = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  O: [[0,1,1,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]],
+  T: [[0,1,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
+  S: [[0,1,1,0],[1,1,0,0],[0,0,0,0],[0,0,0,0]],
+  Z: [[1,1,0,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]],
+  J: [[1,0,0,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
+  L: [[0,0,1,0],[1,1,1,0],[0,0,0,0],[0,0,0,0]],
+};
 
-let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-let particles = [];
-let time = 0;
+const COLORS = {
+  I:"#39c6ff",
+  O:"#ffd24a",
+  T:"#b884ff",
+  S:"#58e06f",
+  Z:"#ff5c6c",
+  J:"#4f79ff",
+  L:"#ff9a3c"
+};
 
-// Random gap column for guaranteed Tetris
-const gapColumn = Math.floor(Math.random() * COLS);
+const PIECES = ["I","O","T","I","O","T","L","J"]; 
+// slight bias to flat pieces
 
-// Pre-fill bottom 4 rows except gap column
-for (let r = ROWS - 4; r < ROWS; r++) {
-  for (let c = 0; c < COLS; c++) {
-    if (c !== gapColumn) {
-      board[r][c] = COLORS[Math.floor(Math.random() * COLORS.length)];
+let board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+
+function rotate(mat) {
+  return mat[0].map((_,i)=>mat.map(r=>r[i]).reverse());
+}
+
+function randomPiece() {
+  const key = PIECES[Math.floor(Math.random()*PIECES.length)];
+  let mat = SHAPES[key];
+  const rotations = Math.floor(Math.random()*4);
+  for(let i=0;i<rotations;i++) mat = rotate(mat);
+  return { key, mat, x:3, y:-1 };
+}
+
+function collides(p, dx, dy) {
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      if(!p.mat[r][c]) continue;
+      const nx = p.x + c + dx;
+      const ny = p.y + r + dy;
+      if(nx<0||nx>=COLS||ny>=ROWS) return true;
+      if(ny>=0 && board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function lock(p) {
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      if(p.mat[r][c]){
+        const x=p.x+c;
+        const y=p.y+r;
+        if(y>=0) board[y][x]=p.key;
+      }
     }
   }
 }
 
-// Random visual filler blocks (lightweight)
-let filler = [];
-function createFiller() {
-  return {
-    x: Math.random() * window.innerWidth,
-    y: -20,
-    size: 20,
-    speed: 2 + Math.random() * 3,
-    color: COLORS[Math.floor(Math.random() * COLORS.length)]
-  };
+function clearLines() {
+  let cleared=0;
+  for(let r=ROWS-1;r>=0;r--){
+    if(board[r].every(cell=>cell)){
+      board.splice(r,1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++;
+      r++;
+    }
+  }
+  return cleared;
 }
 
-function updateFiller() {
-  if (filler.length < 25) filler.push(createFiller());
-  filler.forEach(b => b.y += b.speed);
-  filler = filler.filter(b => b.y < window.innerHeight);
-}
+let piece=randomPiece();
+let dropSpeed=50; // very fast
+let last=0;
+let linesCleared=0;
+let particles=[];
+let state="play";
 
-function drawFiller() {
-  filler.forEach(b => {
-    ctx.fillStyle = b.color;
-    ctx.fillRect(b.x, b.y, b.size, b.size);
-  });
-}
-
-// Explosion particles
-function createExplosion(cx, cy) {
-  for (let i = 0; i < 300; i++) {
+function explode() {
+  const {x,y}=gridOrigin();
+  for(let i=0;i<250;i++){
     particles.push({
-      x: cx,
-      y: cy,
-      dx: (Math.random() - 0.5) * 10,
-      dy: (Math.random() - 1.3) * 10,
-      life: 70,
-      size: 3
+      x:x+GRID_W/2,
+      y:y+GRID_H/2,
+      dx:(Math.random()-0.5)*8,
+      dy:(Math.random()-1)*8,
+      life:60
     });
   }
 }
 
 function updateParticles() {
-  particles.forEach(p => {
-    p.x += p.dx;
-    p.y += p.dy;
-    p.dy += 0.3;
+  particles.forEach(p=>{
+    p.x+=p.dx;
+    p.y+=p.dy;
+    p.dy+=0.3;
     p.life--;
   });
-  particles = particles.filter(p => p.life > 0);
+  particles=particles.filter(p=>p.life>0);
 }
 
 function drawParticles() {
   ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  particles.forEach(p => {
-    ctx.globalAlpha = p.life / 70;
-    ctx.fillStyle = "#5aa9ff";
-    ctx.fillRect(p.x, p.y, p.size, p.size);
+  ctx.globalCompositeOperation="lighter";
+  particles.forEach(p=>{
+    ctx.globalAlpha=p.life/60;
+    ctx.fillStyle="#5aa9ff";
+    ctx.fillRect(p.x,p.y,3,3);
   });
   ctx.restore();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=1;
 }
 
-// Draw board
-function drawBoard(shakeX = 0, shakeY = 0) {
-  const { x: ox, y: oy } = gridOrigin();
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (board[r][c]) {
-        ctx.fillStyle = board[r][c];
-        ctx.fillRect(ox + c * CELL, oy + r * CELL, CELL, CELL);
+function drawBoard() {
+  const {x:ox,y:oy}=gridOrigin();
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(board[r][c]){
+        ctx.fillStyle=COLORS[board[r][c]];
+        ctx.fillRect(ox+c*CELL,oy+r*CELL,CELL,CELL);
       }
     }
   }
-
-  ctx.restore();
 }
 
-// I-piece drop
-let iY = -4;
-let dropStarted = false;
-let explosionTriggered = false;
-let flashAlpha = 0;
-let shakeIntensity = 0;
-
-function loop() {
-  ctx.fillStyle = "#0a0f1c";
-  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
-  time += 16;
-
-  updateFiller();
-  drawFiller();
-
-  let shakeX = 0;
-  let shakeY = 0;
-
-  if (shakeIntensity > 0) {
-    shakeX = (Math.random() - 0.5) * shakeIntensity;
-    shakeY = (Math.random() - 0.5) * shakeIntensity;
-    shakeIntensity *= 0.9; // decay
-  }
-
-  drawBoard(shakeX, shakeY);
-
-  const { x: ox, y: oy } = gridOrigin();
-
-  if (time > 1500) dropStarted = true;
-
-  if (dropStarted && !explosionTriggered) {
-    iY += 0.6;
-
-    for (let i = 0; i < 4; i++) {
-      ctx.fillStyle = "#39c6ff";
-      ctx.fillRect(
-        ox + gapColumn * CELL + shakeX,
-        oy + (iY + i) * CELL + shakeY,
-        CELL,
-        CELL
-      );
+function drawPiece() {
+  const {x:ox,y:oy}=gridOrigin();
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      if(piece.mat[r][c]){
+        ctx.fillStyle=COLORS[piece.key];
+        ctx.fillRect(ox+(piece.x+c)*CELL,oy+(piece.y+r)*CELL,CELL,CELL);
+      }
     }
+  }
+}
 
-    if (iY + 3 >= ROWS - 1) {
-      explosionTriggered = true;
+function loop(timestamp){
+  ctx.fillStyle="#0a0f1c";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-      const cx = ox + gapColumn * CELL + CELL / 2;
-      const cy = oy + (ROWS - 2) * CELL;
-
-      createExplosion(cx, cy);
-
-      flashAlpha = 0.6;
-      shakeIntensity = 10;
+  if(state==="play"){
+    if(timestamp-last>dropSpeed){
+      if(!collides(piece,0,1)){
+        piece.y++;
+      } else {
+        lock(piece);
+        const cleared=clearLines();
+        linesCleared+=cleared;
+        piece=randomPiece();
+        if(linesCleared>=2){ // trigger after 2 lines
+          state="explode";
+          explode();
+        }
+      }
+      last=timestamp;
     }
   }
 
-  updateParticles();
-  drawParticles();
+  drawBoard();
+  drawPiece();
 
-  // Screen flash
-  if (flashAlpha > 0) {
-    ctx.fillStyle = `rgba(90,169,255,${flashAlpha})`;
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-    flashAlpha *= 0.85;
-  }
-
-  // Fade to site
-  if (explosionTriggered && particles.length === 0) {
-    intro.style.transition = "opacity 0.5s ease";
-    intro.style.opacity = "0";
-    setTimeout(() => {
-      intro.style.display = "none";
-      content.style.opacity = "1";
-    }, 500);
+  if(state==="explode"){
+    updateParticles();
+    drawParticles();
+    if(particles.length===0){
+      intro.style.opacity="0";
+      setTimeout(()=>{
+        intro.style.display="none";
+        content.style.opacity="1";
+      },500);
+    }
   }
 
   requestAnimationFrame(loop);
 }
 
-loop();
-
-// Scroll fade animation
-const faders = document.querySelectorAll(".fade");
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) entry.target.classList.add("visible");
-  });
-});
-faders.forEach(section => observer.observe(section));
+requestAnimationFrame(loop);
