@@ -143,26 +143,29 @@ let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 // Final piece: I vertical at x=0 clears 4 lines.
 
 const SCRIPT = [
-  // Build the right side: a vertical I in col 9 sets a clean wall
-  { type: "I", rot: 1, targetX: 9 },
+  // Foundation layer
+  { type: "J", rot: 1, targetX: 1 },
+  { type: "L", rot: 3, targetX: 4 },
+  { type: "S", rot: 0, targetX: 6 },
+  { type: "Z", rot: 0, targetX: 3 },
+  { type: "T", rot: 2, targetX: 5 },
 
-  // Fill bottom two rows (cols 1..8) with Os, looks clean/fast
-  { type: "O", rot: 0, targetX: 1 },
-  { type: "O", rot: 0, targetX: 3 },
-  { type: "O", rot: 0, targetX: 5 },
-  { type: "O", rot: 0, targetX: 7 },
-
-  // Now fill the next two rows above with more Os (fast, clean)
-  { type: "O", rot: 0, targetX: 1 },
-  { type: "O", rot: 0, targetX: 3 },
-  { type: "O", rot: 0, targetX: 5 },
-  { type: "O", rot: 0, targetX: 7 },
-
-  // A couple “pro” touches before the finish (they land above and look like play)
+  // Second layer
+  { type: "L", rot: 1, targetX: 2 },
+  { type: "J", rot: 3, targetX: 6 },
   { type: "T", rot: 1, targetX: 4 },
-  { type: "L", rot: 2, targetX: 6 },
+  { type: "O", rot: 0, targetX: 7 },
 
-  // Final: vertical I in the left well -> clears 4 lines at once
+  // Third layer
+  { type: "S", rot: 0, targetX: 2 },
+  { type: "Z", rot: 0, targetX: 5 },
+  { type: "L", rot: 2, targetX: 7 },
+
+  // Fourth layer shaping
+  { type: "T", rot: 0, targetX: 3 },
+  { type: "J", rot: 2, targetX: 6 },
+
+  // Final Tetris
   { type: "I", rot: 1, targetX: 0 },
 ];
 
@@ -439,3 +442,4 @@ const observer = new IntersectionObserver(
   { threshold: 0.12 }
 );
 faders.forEach(el => observer.observe(el));
+
