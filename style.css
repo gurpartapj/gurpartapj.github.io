@@ -465,3 +465,25 @@ main {
     transform: translateY(-6px);
     box-shadow: 0 20px 40px rgba(0,0,0,0.35);
 }
+#intro {
+    position: fixed;
+    inset: 0;
+    background: #0a0f1c;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    opacity: 1;
+    transition: opacity 0.55s ease;
+}
+
+#tetrisCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+#content {
+    opacity: 0;
+    transition: opacity 0.8s ease;
+}
