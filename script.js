@@ -420,4 +420,25 @@ if (!intro || !content || !canvas || !ctx) {
   }
 
   loop(performance.now());
-}
+} 
+// PCB front/back toggle
+const toggleButtons = document.querySelectorAll(".toggle-btn");
+const frontImage = document.getElementById("frontImage");
+const backImage = document.getElementById("backImage");
+
+toggleButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    toggleButtons.forEach(btn => btn.classList.remove("active"));
+    button.classList.add("active");
+
+    const selected = button.dataset.image;
+
+    if (selected === "front") {
+      frontImage.classList.add("active");
+      backImage.classList.remove("active");
+    } else {
+      backImage.classList.add("active");
+      frontImage.classList.remove("active");
+    }
+  });
+});
