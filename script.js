@@ -419,3 +419,15 @@ const observer = new IntersectionObserver(
 );
 
 faders.forEach(section => observer.observe(section));
+
+// Subtle parallax effect
+document.addEventListener("mousemove", (e) => {
+  const x = (e.clientX / window.innerWidth - 0.5) * 10;
+  const y = (e.clientY / window.innerHeight - 0.5) * 10;
+
+  document.querySelectorAll(".hero-card").forEach(el => {
+    el.style.transform = `translate(${x * 0.5}px, ${y * 0.5}px)`;
+  });
+});
+
+faders.forEach(section => observer.observe(section));
