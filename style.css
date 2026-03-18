@@ -465,6 +465,8 @@ main {
     transform: translateY(-6px);
     box-shadow: 0 20px 40px rgba(0,0,0,0.35);
 }
+/* ===== TETRIS INTRO ===== */
+
 #intro {
     position: fixed;
     inset: 0;
