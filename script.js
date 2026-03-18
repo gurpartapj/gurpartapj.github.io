@@ -6,14 +6,16 @@
 // Builds stack -> 4-line clear -> explode -> site
 // =============================
 
+// ======= Performance-friendly Mini Tetris Intro =======
+
 const intro = document.getElementById("intro");
 const content = document.getElementById("content");
 const canvas = document.getElementById("tetrisCanvas");
-const ctx = canvas.getContext("2d", { alpha: false });
+const ctx = canvas.getContext("2d", { alpha: false }); // faster than default
 
-// ----- Canvas / DPR (performance + crisp) -----
+// --- Responsive canvas with DPR scaling (crisp + less lag) ---
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap DPR for performance
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   canvas.style.width = window.innerWidth + "px";
@@ -23,14 +25,14 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-// ----- Tetris config -----
-const CELL = 26;
-const ROWS = 18;
+// ======= Grid sizing =======
+const CELL = 22;                 // size of a tetris cell in px
+const ROWS = 18;                 // small grid for quick fill
 const COLS = 10;
-
 const GRID_W = COLS * CELL;
 const GRID_H = ROWS * CELL;
 
+// Center grid on screen
 function gridOrigin() {
   return {
     x: Math.floor((window.innerWidth - GRID_W) / 2),
@@ -38,7 +40,7 @@ function gridOrigin() {
   };
 }
 
-// ----- Tetrominoes (4x4) -----
+// ======= Tetromino shapes (4x4 matrices) =======
 const SHAPES = {
   I: [
     [0,0,0,0],
@@ -58,18 +60,6 @@ const SHAPES = {
     [0,0,0,0],
     [0,0,0,0],
   ],
-  J: [
-    [1,0,0,0],
-    [1,1,1,0],
-    [0,0,0,0],
-    [0,0,0,0],
-  ],
-  L: [
-    [0,0,1,0],
-    [1,1,1,0],
-    [0,0,0,0],
-    [0,0,0,0],
-  ],
   S: [
     [0,1,1,0],
     [1,1,0,0],
@@ -82,185 +72,88 @@ const SHAPES = {
     [0,0,0,0],
     [0,0,0,0],
   ],
+  J: [
+    [1,0,0,0],
+    [1,1,1,0],
+    [0,0,0,0],
+    [0,0,0,0],
+  ],
+  L: [
+    [0,0,1,0],
+    [1,1,1,0],
+    [0,0,0,0],
+    [0,0,0,0],
+  ],
 };
 
+// Unique colors per piece
 const COLORS = {
-  I: "#39c6ff",
-  O: "#ffd24a",
-  T: "#b884ff",
-  S: "#58e06f",
-  Z: "#ff5c6c",
-  J: "#4f79ff",
-  L: "#ff9a3c",
+  I: "#39c6ff", // cyan-ish
+  O: "#ffd24a", // yellow
+  T: "#b884ff", // purple
+  S: "#58e06f", // green
+  Z: "#ff5c6c", // red
+  J: "#4f79ff", // blue
+  L: "#ff9a3c", // orange
 };
 
-// ----- Helpers -----
-function clone4(m) { return m.map(r => r.slice()); }
+const PIECE_KEYS = Object.keys(SHAPES);
+
+// ======= Helpers =======
+function clone4(m) {
+  return m.map(row => row.slice());
+}
 
 function rotateCW(mat) {
+  // 4x4 rotate
   const res = Array.from({ length: 4 }, () => Array(4).fill(0));
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) res[c][3 - r] = mat[r][c];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      res[c][3 - r] = mat[r][c];
+    }
+  }
   return res;
 }
 
-// Normalize matrix so blocks are packed top-left.
-// This prevents “stuck/floating offset” after rotation (your screenshot bug).
-function normalize(mat) {
-  let minR = 4, minC = 4, maxR = -1, maxC = -1;
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      if (mat[r][c]) {
-        minR = Math.min(minR, r);
-        minC = Math.min(minC, c);
-        maxR = Math.max(maxR, r);
-        maxC = Math.max(maxC, c);
-      }
-    }
-  }
-  const out = Array.from({ length: 4 }, () => Array(4).fill(0));
-  if (maxR === -1) return out;
-
-  for (let r = minR; r <= maxR; r++) {
-    for (let c = minC; c <= maxC; c++) {
-      if (mat[r][c]) out[r - minR][c - minC] = 1;
-    }
-  }
-  return out;
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function pieceWidth(mat) {
-  let maxC = -1;
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (mat[r][c]) maxC = Math.max(maxC, c);
-  return maxC + 1; // 1..4
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// ----- Board -----
+// ======= Board =======
 let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 
-// ----- Scripted Replay -----
-// Pro-ish: stack on right, keep a left “well”, then drop vertical I at x=0 for a Tetris.
-// The set intentionally fills cols 1..9 in the bottom 4 rows.
-// Final piece: I vertical at x=0 clears 4 lines.
-
-const SCRIPT = [
-  // Foundation layer
-  { type: "J", rot: 1, targetX: 1 },
-  { type: "L", rot: 3, targetX: 4 },
-  { type: "S", rot: 0, targetX: 6 },
-  { type: "Z", rot: 0, targetX: 3 },
-  { type: "T", rot: 2, targetX: 5 },
-
-  // Second layer
-  { type: "L", rot: 1, targetX: 2 },
-  { type: "J", rot: 3, targetX: 6 },
-  { type: "T", rot: 1, targetX: 4 },
-  { type: "O", rot: 0, targetX: 7 },
-
-  // Third layer
-  { type: "S", rot: 0, targetX: 2 },
-  { type: "Z", rot: 0, targetX: 5 },
-  { type: "L", rot: 2, targetX: 7 },
-
-  // Fourth layer shaping
-  { type: "T", rot: 0, targetX: 3 },
-  { type: "J", rot: 2, targetX: 6 },
-
-  // Final Tetris
-  { type: "I", rot: 1, targetX: 0 },
-];
-
-// ----- Current piece state -----
-let scriptIndex = 0;
-let current = null;
-
-// Spawn from script: start centered, then slide to target while falling
-function spawn(step) {
-  let mat = clone4(SHAPES[step.type]);
-  for (let i = 0; i < (step.rot % 4); i++) mat = rotateCW(mat);
-  mat = normalize(mat);
-
-  const w = pieceWidth(mat);
-  const startX = Math.floor((COLS - w) / 2);
-
-  return {
-    type: step.type,
-    mat,
-    x: startX,
-    y: -2,            // slightly above visible
-    targetX: Math.max(0, Math.min(step.targetX, COLS - w)),
-  };
-}
-
-// Collision
-function collides(p, dx, dy) {
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      if (!p.mat[r][c]) continue;
-      const nx = p.x + c + dx;
-      const ny = p.y + r + dy;
-
-      if (nx < 0 || nx >= COLS) return true;
-      if (ny >= ROWS) return true;
-      if (ny >= 0 && board[ny][nx]) return true;
-    }
-  }
-  return false;
-}
-
-function lockPiece(p) {
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      if (!p.mat[r][c]) continue;
-      const x = p.x + c;
-      const y = p.y + r;
-      if (y >= 0) board[y][x] = p.type;
-    }
-  }
-}
-
-function clearLines() {
-  let clearedRows = [];
-  for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r].every(cell => cell !== null)) clearedRows.push(r);
-  }
-  if (!clearedRows.length) return 0;
-
-  for (const r of clearedRows) burstRow(r);
-
-  for (const r of clearedRows) {
-    board.splice(r, 1);
-    board.unshift(Array(COLS).fill(null));
-  }
-  return clearedRows.length;
-}
-
-// ----- Explosion particles -----
+// ======= Particle burst (lightweight) =======
 let particles = [];
-let state = "play"; // play -> explode -> done
-let fadeStarted = false;
-
-function burstRow(row) {
+function burstAt(row) {
+  // Create a small number of particles across the cleared row (performance friendly)
   const { x: ox, y: oy } = gridOrigin();
   const y = oy + row * CELL + CELL / 2;
-  const count = 140; // tuned to avoid lag
+
+  const count = 90; // keep low to avoid lag
   for (let i = 0; i < count; i++) {
+    const px = ox + Math.random() * GRID_W;
     particles.push({
-      x: ox + Math.random() * GRID_W,
+      x: px,
       y,
-      vx: (Math.random() - 0.5) * 7,
-      vy: (Math.random() - 1.0) * 8,
-      life: 55,
-      size: 2 + Math.random() * 2,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.8) * 7,
+      life: randInt(20, 38),
+      size: randInt(1, 3),
     });
   }
 }
 
 function updateParticles() {
+  // No shadows here for speed
   for (const p of particles) {
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.25;
-    p.life--;
+    p.vy += 0.25;     // gravity
+    p.life -= 1;
   }
   particles = particles.filter(p => p.life > 0);
 }
@@ -271,69 +164,127 @@ function drawParticles() {
   ctx.globalCompositeOperation = "lighter";
   ctx.fillStyle = "#5aa9ff";
   for (const p of particles) {
-    ctx.globalAlpha = Math.max(0, p.life / 55);
+    ctx.globalAlpha = Math.max(0, p.life / 38);
     ctx.fillRect(p.x, p.y, p.size, p.size);
   }
   ctx.restore();
   ctx.globalAlpha = 1;
 }
 
-// ----- Drawing -----
+// ======= Current falling piece =======
+let current = null;
+
+function newPiece() {
+  const key = pick(PIECE_KEYS);
+  let mat = clone4(SHAPES[key]);
+
+  // Random rotation 0-3
+  const rot = randInt(0, 3);
+  for (let i = 0; i < rot; i++) mat = rotateCW(mat);
+
+  // Random x position within bounds
+  // We'll start near top. Try random positions; if collision, retry a few times.
+  const tries = 10;
+  for (let t = 0; t < tries; t++) {
+    const x = randInt(-1, COLS - 3); // allow slight left shift; collision checks will handle
+    const piece = { key, mat, x, y: -1 }; // y starts above board
+    if (!collides(piece, 0, 0)) return piece;
+  }
+  // fallback
+  return { key, mat, x: 3, y: -1 };
+}
+
+function collides(piece, dx, dy, testMat) {
+  const mat = testMat || piece.mat;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      if (!mat[r][c]) continue;
+      const nx = piece.x + c + dx;
+      const ny = piece.y + r + dy;
+      // Outside bottom
+      if (ny >= ROWS) return true;
+      // Outside sides
+      if (nx < 0 || nx >= COLS) return true;
+      // Hit existing blocks (ignore rows above the visible board)
+      if (ny >= 0 && board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function lockPiece(piece) {
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      if (!piece.mat[r][c]) continue;
+      const x = piece.x + c;
+      const y = piece.y + r;
+      if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+        board[y][x] = piece.key;
+      }
+    }
+  }
+}
+
+function clearLines() {
+  let cleared = [];
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell !== null)) {
+      cleared.push(r);
+    }
+  }
+  if (!cleared.length) return 0;
+
+  // burst for each cleared row
+  cleared.forEach(row => burstAt(row));
+
+  // remove cleared rows and add empty rows at top
+  for (const row of cleared) {
+    board.splice(row, 1);
+    board.unshift(Array(COLS).fill(null));
+  }
+  return cleared.length;
+}
+
+// ======= Drawing =======
 function drawBackground() {
+  // Matte dark with a subtle vignette
   ctx.fillStyle = "#0a0f1c";
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-  // subtle ambient dots
+  // Subtle floating particles behind grid (very light)
+  // (Optional minimal effect — cheap)
   ctx.save();
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.08;
   ctx.fillStyle = "#5aa9ff";
-  const t = performance.now();
-  for (let i = 0; i < 45; i++) {
-    const x = (i * 101 + t * 0.02) % window.innerWidth;
-    const y = (i * 179 + t * 0.015) % window.innerHeight;
+  for (let i = 0; i < 50; i++) {
+    const x = (i * 97 + (time * 0.03)) % window.innerWidth;
+    const y = (i * 173 + (time * 0.02)) % window.innerHeight;
     ctx.fillRect(x, y, 2, 2);
   }
   ctx.restore();
 }
 
-function drawCell(px, py, color) {
-  ctx.save();
-  ctx.fillStyle = color;
-
-  // soft glow (cheap)
-  ctx.globalAlpha = 0.16;
-  ctx.fillRect(px - 2, py - 2, CELL + 4, CELL + 4);
-
-  ctx.globalAlpha = 1;
-  ctx.fillRect(px, py, CELL, CELL);
-
-  // highlight
-  ctx.globalAlpha = 0.14;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(px + 2, py + 2, CELL - 4, 3);
-  ctx.restore();
-}
-
-function drawBoardAndPiece() {
+function drawGrid() {
   const { x: ox, y: oy } = gridOrigin();
 
-  // border
+  // Soft border
   ctx.save();
-  ctx.globalAlpha = 0.22;
+  ctx.globalAlpha = 0.25;
   ctx.strokeStyle = "#5aa9ff";
+  ctx.lineWidth = 1;
   ctx.strokeRect(ox - 1, oy - 1, GRID_W + 2, GRID_H + 2);
   ctx.restore();
 
-  // board
+  // Board blocks
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const t = board[r][c];
-      if (!t) continue;
-      drawCell(ox + c * CELL, oy + r * CELL, COLORS[t]);
+      const k = board[r][c];
+      if (!k) continue;
+      drawCell(ox + c * CELL, oy + r * CELL, COLORS[k]);
     }
   }
 
-  // current
+  // Current piece
   if (current) {
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 4; c++) {
@@ -341,105 +292,130 @@ function drawBoardAndPiece() {
         const x = current.x + c;
         const y = current.y + r;
         if (y < 0) continue;
-        drawCell(ox + x * CELL, oy + y * CELL, COLORS[current.type]);
+        drawCell(ox + x * CELL, oy + y * CELL, COLORS[current.key]);
       }
     }
   }
 }
 
-// ----- Timing (fast + cinematic) -----
-const DROP_MS = 35;       // gravity speed
-const MOVE_MS = 55;       // horizontal slide speed
-const LOCK_DELAY_MS = 70; // tiny pause before lock
+function drawCell(px, py, color) {
+  // Subtle glow but not too expensive
+  ctx.save();
+  ctx.fillStyle = color;
 
-let last = performance.now();
-let dropAcc = 0;
-let moveAcc = 0;
-let lockAcc = 0;
-let totalCleared = 0;
+  // glow (cheap): draw a slightly larger translucent rect behind
+  ctx.globalAlpha = 0.18;
+  ctx.fillRect(px - 2, py - 2, CELL + 4, CELL + 4);
 
-function nextPiece() {
-  if (scriptIndex >= SCRIPT.length) return null;
-  const p = spawn(SCRIPT[scriptIndex]);
-  scriptIndex++;
-  return p;
+  ctx.globalAlpha = 1;
+  ctx.fillRect(px, py, CELL, CELL);
+
+  // inner highlight
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(px + 2, py + 2, CELL - 4, 3);
+  ctx.restore();
 }
 
-current = nextPiece();
+// ======= Game Loop Timing =======
+let last = performance.now();
+let acc = 0;
+let time = 0;
 
+let dropInterval = 60;     // ms between moves (fast so it doesn’t take long)
+let state = "play";        // play -> explode -> done
+let explodeTimer = 0;
+
+// Ensure it finishes quickly: once we clear 1 line, we end intro
+const LINES_TO_FINISH = 1;
+let linesClearedTotal = 0;
+
+current = newPiece();
+
+// Main loop
 function frame(now) {
   const dt = now - last;
   last = now;
+  time += dt;
+  acc += dt;
 
   drawBackground();
-  drawBoardAndPiece();
 
-  if (state === "play" && current) {
-    dropAcc += dt;
-    moveAcc += dt;
+  if (state === "play") {
+    // Move down at fixed intervals
+    while (acc >= dropInterval) {
+      acc -= dropInterval;
 
-    // Slide toward target X (looks like a player)
-    while (moveAcc >= MOVE_MS) {
-      moveAcc -= MOVE_MS;
-      if (current.x < current.targetX && !collides(current, +1, 0)) current.x++;
-      else if (current.x > current.targetX && !collides(current, -1, 0)) current.x--;
-    }
-
-    // Drop
-    while (dropAcc >= DROP_MS) {
-      dropAcc -= DROP_MS;
-
-      if (!collides(current, 0, +1)) {
-        current.y++;
-        lockAcc = 0;
+      if (!collides(current, 0, 1)) {
+        current.y += 1;
       } else {
-        lockAcc += DROP_MS;
-        if (lockAcc >= LOCK_DELAY_MS) {
-          lockPiece(current);
+        // lock + clear
+        lockPiece(current);
+        const cleared = clearLines();
+        linesClearedTotal += cleared;
 
-          const cleared = clearLines();
-          totalCleared += cleared;
+        // spawn next
+        current = newPiece();
 
-          current = nextPiece();
-          lockAcc = 0;
+        // if board is too full (top collision), force transition anyway
+        if (collides(current, 0, 0)) {
+          state = "explode";
+          explodeTimer = 0;
+        }
 
-          // Trigger explosion as soon as we get the big 4-line clear
-          // (In this script it happens on the final I piece)
-          if (cleared >= 4 || totalCleared >= 4) {
-            state = "explode";
-          }
-
-          // Safety: if script ends without clear, still explode
-          if (!current) state = "explode";
+        // transition after 1 line clear
+        if (linesClearedTotal >= LINES_TO_FINISH) {
+          state = "explode";
+          explodeTimer = 0;
         }
       }
     }
   } else if (state === "explode") {
-    updateParticles();
-    drawParticles();
+    // run particles for a short time then fade to site
+    explodeTimer += dt;
 
-    // When particles are mostly done, fade to site
-    if (!fadeStarted && particles.length < 40) {
-      fadeStarted = true;
-      intro.style.transition = "opacity 0.55s ease";
+    // keep generating a tiny extra burst early for “pop”
+    if (explodeTimer < 140 && particles.length < 160) {
+      burstAt(randInt(Math.floor(ROWS * 0.4), ROWS - 2));
+    }
+
+    if (explodeTimer > 650) {
+      // fade out intro smoothly
+      intro.style.transition = "opacity 450ms ease";
       intro.style.opacity = "0";
+      state = "done";
+
       setTimeout(() => {
         intro.style.display = "none";
         content.style.opacity = "1";
-      }, 560);
+      }, 460);
     }
   }
+
+  drawGrid();
+
+  updateParticles();
+  drawParticles();
 
   requestAnimationFrame(frame);
 }
 
 requestAnimationFrame(frame);
 
-// ----- Scroll fade for page sections -----
+// ======= Reveal sections on scroll =======
 const faders = document.querySelectorAll(".fade");
-const observer = new IntersectionObserver(
-  entries => entries.forEach(e => e.isIntersecting && e.target.classList.add("visible")),
-  { threshold: 0.12 }
-);
-faders.forEach(el => observer.observe(el));
 
+const observer = new IntersectionObserver(
+  entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("visible");
+      }
+    });
+  },
+  {
+    threshold: 0.15
+  }
+);
+
+faders.forEach(section => observer.observe(section));
