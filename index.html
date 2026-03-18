@@ -100,10 +100,17 @@
       </div>
 
       <div class="project-showcase">
-        <div class="project-image-wrap">
-  <div class="pcb-gallery">
-    <img src="front.png" alt="PCB Front View" class="pcb-image" />
-<img src="back.png" alt="PCB Back View" class="pcb-image" />
+       <div class="project-image-wrap">
+  <div class="pcb-toggle">
+    <div class="pcb-toggle-buttons">
+      <button class="toggle-btn active" data-image="front">Front</button>
+      <button class="toggle-btn" data-image="back">Back</button>
+    </div>
+
+    <div class="pcb-display">
+      <img src="front.png" alt="PCB Front View" class="pcb-image active" id="frontImage" />
+      <img src="back.png" alt="PCB Back View" class="pcb-image" id="backImage" />
+    </div>
   </div>
 </div>
 
