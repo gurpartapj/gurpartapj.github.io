@@ -442,3 +442,290 @@ toggleButtons.forEach(button => {
     }
   });
 });
+// ===== Hero Tetris strip =====
+(function initHeroGameStrip() {
+  const canvas = document.getElementById("heroGameCanvas");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  let CELL = 18;
+  let ROWS = 8;
+  let COLS = 0;
+  let board = [];
+  let current = null;
+  let lastTime = 0;
+  let dropAccumulator = 0;
+  const DROP_MS = 140;
+
+  const COLORS = {
+    I: "#39c6ff",
+    O: "#ffd24a",
+    T: "#b884ff",
+    S: "#58e06f",
+    Z: "#ff5c6c",
+    J: "#4f79ff",
+    L: "#ff9a3c"
+  };
+
+  const SHAPES = {
+    I: [
+      [0,0,0,0],
+      [1,1,1,1],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    O: [
+      [0,1,1,0],
+      [0,1,1,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    T: [
+      [0,1,0,0],
+      [1,1,1,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    S: [
+      [0,1,1,0],
+      [1,1,0,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    Z: [
+      [1,1,0,0],
+      [0,1,1,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    J: [
+      [1,0,0,0],
+      [1,1,1,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    L: [
+      [0,0,1,0],
+      [1,1,1,0],
+      [0,0,0,0],
+      [0,0,0,0],
+    ]
+  };
+
+  const TYPES = Object.keys(SHAPES);
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    CELL = rect.width < 700 ? 14 : 18;
+    COLS = Math.max(12, Math.floor(rect.width / CELL));
+    ROWS = Math.max(6, Math.floor(rect.height / CELL));
+
+    board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    current = spawnPiece();
+  }
+
+  function clone4(mat) {
+    return mat.map(r => r.slice());
+  }
+
+  function rotateCW(mat) {
+    const res = Array.from({ length: 4 }, () => Array(4).fill(0));
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        res[c][3 - r] = mat[r][c];
+      }
+    }
+    return res;
+  }
+
+  function normalize(mat) {
+    let minR = 4, minC = 4, maxR = -1, maxC = -1;
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        if (mat[r][c]) {
+          minR = Math.min(minR, r);
+          minC = Math.min(minC, c);
+          maxR = Math.max(maxR, r);
+          maxC = Math.max(maxC, c);
+        }
+      }
+    }
+    const out = Array.from({ length: 4 }, () => Array(4).fill(0));
+    if (maxR === -1) return out;
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        if (mat[r][c]) out[r - minR][c - minC] = 1;
+      }
+    }
+    return out;
+  }
+
+  function pieceWidth(mat) {
+    let maxC = -1;
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        if (mat[r][c]) maxC = Math.max(maxC, c);
+      }
+    }
+    return maxC + 1;
+  }
+
+  function spawnPiece() {
+    const type = TYPES[Math.floor(Math.random() * TYPES.length)];
+    let mat = clone4(SHAPES[type]);
+    const rotations = Math.floor(Math.random() * 4);
+    for (let i = 0; i < rotations; i++) mat = rotateCW(mat);
+    mat = normalize(mat);
+
+    const w = pieceWidth(mat);
+    return {
+      type,
+      mat,
+      x: Math.floor(Math.random() * Math.max(1, COLS - w)),
+      y: -2
+    };
+  }
+
+  function collides(piece, dx, dy) {
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        if (!piece.mat[r][c]) continue;
+        const nx = piece.x + c + dx;
+        const ny = piece.y + r + dy;
+
+        if (nx < 0 || nx >= COLS) return true;
+        if (ny >= ROWS) return true;
+        if (ny >= 0 && board[ny][nx]) return true;
+      }
+    }
+    return false;
+  }
+
+  function lockPiece(piece) {
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        if (!piece.mat[r][c]) continue;
+        const x = piece.x + c;
+        const y = piece.y + r;
+        if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+          board[y][x] = piece.type;
+        }
+      }
+    }
+  }
+
+  function clearLines() {
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (board[r].every(Boolean)) {
+        board.splice(r, 1);
+        board.unshift(Array(COLS).fill(null));
+        r++;
+      }
+    }
+  }
+
+  function resetBoardIfNeeded() {
+    const filledTop = board[0].some(Boolean) || board[1].some(Boolean);
+    if (filledTop) {
+      board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    }
+  }
+
+  function drawCell(x, y, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+
+    ctx.globalAlpha = 0.16;
+    ctx.fillRect(x - 1.5, y - 1.5, CELL + 3, CELL + 3);
+
+    ctx.globalAlpha = 1;
+    ctx.fillRect(x, y, CELL, CELL);
+
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + 2, y + 2, CELL - 4, 3);
+    ctx.restore();
+  }
+
+  function draw() {
+    const rect = canvas.getBoundingClientRect();
+
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    // subtle grid
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.strokeStyle = "#5aa9ff";
+    for (let c = 0; c <= COLS; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * CELL + 0.5, 0);
+      ctx.lineTo(c * CELL + 0.5, ROWS * CELL);
+      ctx.stroke();
+    }
+    for (let r = 0; r <= ROWS; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0, r * CELL + 0.5);
+      ctx.lineTo(COLS * CELL, r * CELL + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // locked board
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const type = board[r][c];
+        if (type) drawCell(c * CELL, r * CELL, COLORS[type]);
+      }
+    }
+
+    // current piece
+    if (current) {
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if (!current.mat[r][c]) continue;
+          const px = (current.x + c) * CELL;
+          const py = (current.y + r) * CELL;
+          if (py > -CELL) drawCell(px, py, COLORS[current.type]);
+        }
+      }
+    }
+  }
+
+  function step() {
+    if (!current) current = spawnPiece();
+
+    if (!collides(current, 0, 1)) {
+      current.y++;
+    } else {
+      lockPiece(current);
+      clearLines();
+      resetBoardIfNeeded();
+      current = spawnPiece();
+    }
+  }
+
+  function animate(time) {
+    if (!lastTime) lastTime = time;
+    const dt = time - lastTime;
+    lastTime = time;
+    dropAccumulator += dt;
+
+    while (dropAccumulator >= DROP_MS) {
+      dropAccumulator -= DROP_MS;
+      step();
+    }
+
+    draw();
+    requestAnimationFrame(animate);
+  }
+
+  resize();
+  window.addEventListener("resize", resize);
+  requestAnimationFrame(animate);
+})();
